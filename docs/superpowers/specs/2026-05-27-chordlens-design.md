@@ -71,6 +71,7 @@ After commit:
 - Camera input: browser `getUserMedia`.
 - Hand tracking: MediaPipe Hand Landmarker for up to two hands.
 - Hit testing: map index-finger tip landmarks to overlay button bounds.
+- Coordinate calibration: account for mirrored camera preview, video aspect ratio, and MediaPipe handedness labels before assigning left-hand beat selection and right-hand chord selection.
 - State machine: stabilize hover, commit, and cooldown behavior.
 - Sequencer: in-memory timeline with JSON serialization.
 - Audio engine: synth chord playback and loop scheduling.
@@ -124,7 +125,7 @@ The player should support:
 - Solo/mute per stem.
 - Vocal mute for cover practice.
 - Speed adjustment.
-- Pitch/key adjustment.
+- Pitch/key adjustment for practice preview, with backend-rendered export treated as optional for V1.
 - Chord timeline display synchronized to playback.
 - Export of analysis JSON.
 - Export of a simple vocal-removed backing track if feasible.
@@ -137,7 +138,7 @@ The player should support:
 - Database: SQLite for local project metadata.
 - Stem separation: Demucs.
 - Audio analysis: librosa and/or Essentia for BPM, key, beat grid, and features.
-- Chord analysis: model-backed or library-backed pipeline, treated as best-effort in MVP.
+- Chord analysis: local model-backed or library-backed pipeline, treated as best-effort in MVP. V1 should not depend on a cloud transcription service.
 - Frontend playback: Web Audio API, Tone.js, and/or wavesurfer.js.
 
 ## Architecture
@@ -302,4 +303,5 @@ Mitigation: Show progress clearly, keep jobs asynchronous, and store intermediat
 - Whether to use Tone.js or lower-level Web Audio directly.
 - Which chord recognition pipeline to adopt for V1.
 - Whether pitch/time adjustment should be preview-only in browser or rendered into exported files by backend.
+
 
