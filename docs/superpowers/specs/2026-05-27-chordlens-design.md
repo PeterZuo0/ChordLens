@@ -302,3 +302,4 @@ Mitigation: Show progress clearly, keep jobs asynchronous, and store intermediat
 - Whether to use Tone.js or lower-level Web Audio directly.
 - Which chord recognition pipeline to adopt for V1.
 - Whether pitch/time adjustment should be preview-only in browser or rendered into exported files by backend.
+
