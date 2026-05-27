@@ -35,3 +35,27 @@ export interface AnalysisSummary {
   stems: string[];
   chords: ChordEvent[];
 }
+
+export interface TransientAudioAnalysisResponse {
+  analysisKind: "best_effort";
+  temporary: true;
+  source: {
+    fileName: string;
+    format: string;
+    fileSizeBytes: number;
+    durationSec: number | null;
+    sampleRate: number | null;
+    channels: number | null;
+  };
+  music: {
+    bpm: number | null;
+    key: string | null;
+    confidence: number | null;
+  };
+  stems: {
+    requested: boolean;
+    status: "not_requested" | "complete" | "unavailable" | "failed";
+    items: string[];
+    message: string | null;
+  };
+}

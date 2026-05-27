@@ -1,14 +1,14 @@
 import { useState } from "react";
 
 interface AudioUploadPanelProps {
-  onUpload: (file: File) => Promise<void>;
-  onCreateMock: () => Promise<void>;
+  onAnalyze: (file: File, separateStems: boolean) => Promise<void>;
 }
 
 const allowedExtensions = [".mp3", ".wav", ".m4a"];
 
-export function AudioUploadPanel({ onUpload, onCreateMock }: AudioUploadPanelProps) {
+export function AudioUploadPanel({ onAnalyze }: AudioUploadPanelProps) {
   const [file, setFile] = useState<File | null>(null);
+  const [separateStems, setSeparateStems] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -18,7 +18,7 @@ export function AudioUploadPanel({ onUpload, onCreateMock }: AudioUploadPanelPro
     setError(null);
   }
 
-  async function runUpload() {
+  async function runAnalysis() {
     if (!file) {
       setError("Choose an mp3, wav, or m4a file first.");
       return;
@@ -33,21 +33,9 @@ export function AudioUploadPanel({ onUpload, onCreateMock }: AudioUploadPanelPro
     setBusy(true);
     setError(null);
     try {
-      await onUpload(file);
+      await onAnalyze(file, separateStems);
     } catch (issue) {
-      setError(issue instanceof Error ? issue.message : "Upload failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createMock() {
-    setBusy(true);
-    setError(null);
-    try {
-      await onCreateMock();
-    } catch (issue) {
-      setError(issue instanceof Error ? issue.message : "Could not create mock project.");
+      setError(issue instanceof Error ? issue.message : "Analysis failed.");
     } finally {
       setBusy(false);
     }
@@ -62,15 +50,24 @@ export function AudioUploadPanel({ onUpload, onCreateMock }: AudioUploadPanelPro
       <label className="file-drop">
         <input accept=".mp3,.wav,.m4a" type="file" onChange={handleFileChange} />
         <span>{file ? file.name : "Choose an audio file"}</span>
-        <small>mp3, wav, or m4a. Phase 2 stores the file and returns mock analysis.</small>
+        <small>mp3, wav, or m4a. Files are analyzed once and not saved.</small>
+      </label>
+      <label className="toggle-row">
+        <input
+          checked={separateStems}
+          disabled={busy}
+          onChange={(event) => setSeparateStems(event.target.checked)}
+          type="checkbox"
+        />
+        <span>
+          <strong>Separate stems</strong>
+          <small>Optional and slower. Stem files stay temporary and only a status summary is returned.</small>
+        </span>
       </label>
       {error ? <p className="error-text">{error}</p> : null}
       <div className="button-row">
-        <button className="button primary" disabled={busy} onClick={runUpload} type="button">
-          {busy ? "Working..." : "Upload"}
-        </button>
-        <button className="button secondary" disabled={busy} onClick={createMock} type="button">
-          Create mock project
+        <button className="button primary" disabled={busy} onClick={runAnalysis} type="button">
+          {busy ? "Analyzing..." : "Analyze"}
         </button>
       </div>
     </section>

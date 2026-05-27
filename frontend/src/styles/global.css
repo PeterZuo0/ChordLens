@@ -284,6 +284,37 @@ p {
   font-weight: 700;
 }
 
+.toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  color: #33443b;
+}
+
+.toggle-row input {
+  margin-top: 4px;
+}
+
+.toggle-row span {
+  display: grid;
+  gap: 4px;
+}
+
+.toggle-row small {
+  color: #66746d;
+  line-height: 1.45;
+}
+
+.status-note {
+  margin: 12px 0 0;
+  border: 1px solid rgba(47, 109, 85, 0.2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #eef7f1;
+  color: #355446;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

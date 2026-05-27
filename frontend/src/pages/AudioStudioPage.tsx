@@ -1,31 +1,18 @@
 import { useState } from "react";
 
-import { createAudioProject, getAudioProjectAnalysis, uploadAudioFile } from "../api/client";
-import type { AnalysisSummary as AnalysisSummaryType, ProjectSummary } from "../api/types";
+import { analyzeAudioFile } from "../api/client";
+import type { TransientAudioAnalysisResponse } from "../api/types";
 import { AnalysisSummary } from "../audio-studio/AnalysisSummary";
 import { AudioUploadPanel } from "../audio-studio/AudioUploadPanel";
-import { ChordTimeline } from "../audio-studio/ChordTimeline";
 import { StemControls } from "../audio-studio/StemControls";
 import { routes } from "../app/routes";
 
 export function AudioStudioPage() {
-  const [project, setProject] = useState<ProjectSummary | null>(null);
-  const [analysis, setAnalysis] = useState<AnalysisSummaryType | null>(null);
+  const [analysis, setAnalysis] = useState<TransientAudioAnalysisResponse | null>(null);
 
-  async function loadAnalysis(nextProject: ProjectSummary) {
-    setProject(nextProject);
-    const nextAnalysis = await getAudioProjectAnalysis(nextProject.id);
+  async function handleAnalyze(file: File, separateStems: boolean) {
+    const nextAnalysis = await analyzeAudioFile(file, separateStems);
     setAnalysis(nextAnalysis);
-  }
-
-  async function handleUpload(file: File) {
-    const nextProject = await uploadAudioFile(file);
-    await loadAnalysis(nextProject);
-  }
-
-  async function handleCreateMock() {
-    const nextProject = await createAudioProject("Mock practice song");
-    await loadAnalysis(nextProject);
   }
 
   return (
@@ -45,16 +32,15 @@ export function AudioStudioPage() {
       <header className="page-header">
         <div>
           <h1>Audio Analysis Studio</h1>
-          <p>Upload local audio and inspect a clearly labeled mock analysis workspace.</p>
+          <p>Upload local audio for one-time BPM, key, metadata, and optional stem analysis.</p>
         </div>
-        <span className="phase-tag">Phase 2A mock analysis</span>
+        <span className="phase-tag">Temporary best-effort analysis</span>
       </header>
 
       <div className="studio-layout">
-        <AudioUploadPanel onCreateMock={handleCreateMock} onUpload={handleUpload} />
-        <AnalysisSummary analysis={analysis} project={project} />
-        <ChordTimeline chords={analysis?.chords ?? []} />
-        <StemControls stems={analysis?.stems ?? []} />
+        <AudioUploadPanel onAnalyze={handleAnalyze} />
+        <AnalysisSummary analysis={analysis} />
+        <StemControls stems={analysis?.stems ?? null} />
       </div>
     </main>
   );

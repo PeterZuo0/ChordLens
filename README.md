@@ -25,10 +25,11 @@ The first version is designed as a local personal tool. It intentionally avoids 
 ### Audio Analysis Studio
 
 - Upload `mp3`, `wav`, or `m4a` files.
-- Local stem separation into vocals, drums, bass, and other.
-- Vocal mute for cover practice.
-- BPM, key, beat grid, and chord progression analysis.
-- Stem solo/mute controls.
+- One-time local metadata, BPM, and key analysis.
+- Optional local stem separation summary when Demucs is installed.
+- Results stay in the current page state and are cleared on refresh.
+- Uploaded files are processed in temporary storage and are not persisted.
+- Later iterations may add chord progression analysis, stem playback, vocal mute, speed, and pitch tools.
 - Playback speed and pitch adjustment.
 - Export analysis data and simple backing-track outputs where feasible.
 
@@ -38,8 +39,8 @@ The first version is designed as a local personal tool. It intentionally avoids 
 - AR: MediaPipe Hand Landmarker.
 - Audio playback: Web Audio API, Tone.js, and/or wavesurfer.js.
 - Backend: Python FastAPI.
-- Analysis: Demucs, librosa, Essentia, and local chord-analysis tooling.
-- Storage: local filesystem and SQLite.
+- Analysis: mutagen, librosa, optional Demucs, and later local chord-analysis tooling.
+- Storage: local filesystem for planned project data; transient Audio Studio uploads are not saved.
 
 See the technical design document:
 
@@ -55,7 +56,7 @@ Planned implementation layout:
 
 - `frontend/`: React, Vite, and TypeScript local web app.
 - `backend/`: Python FastAPI local API.
-- `data/projects/`: local runtime project storage for uploaded audio, generated analysis, stems, and exports.
+- `data/projects/`: local runtime project storage for project-based features. The transient Audio Studio endpoint does not write here.
 - `docs/superpowers/specs/`: product and technical specs.
 - `docs/superpowers/plans/`: implementation plans.
 
@@ -110,7 +111,9 @@ npm.cmd run build
 
 ## Current Phase Notes
 
-- Audio Studio analysis is mock/best-effort until real local pipelines are connected.
-- Stem separation is not implemented yet.
+- Audio Studio uses `POST /api/audio/analyze` for one-time best-effort analysis.
+- Audio Studio does not use SQLite and does not persist uploaded files.
+- BPM and key are best-effort. If local analysis dependencies are unavailable or the file is weak for analysis, values may be `Unknown`.
+- Stem separation is optional, off by default, and requires Demucs on `PATH`. This iteration returns stem status only, not playable stem files.
 - AR hand tracking is not implemented yet.
 - YouTube extraction remains intentionally out of scope.

@@ -1,15 +1,23 @@
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.core.config import ALLOWED_AUDIO_EXTENSIONS
-from app.models.audio import AnalysisSummary, CreateAudioProjectRequest
+from app.models.audio import AnalysisSummary, CreateAudioProjectRequest, TransientAudioAnalysisResponse
 from app.models.projects import ProjectSummary
 from app.services.mock_analysis import build_mock_analysis, write_mock_analysis
 from app.services.project_store import create_audio_project, get_project, get_project_dir
+from app.services.transient_audio_analysis import analyze_upload
 
 
 router = APIRouter(prefix="/api/audio", tags=["audio"])
+
+
+@router.post("/analyze", response_model=TransientAudioAnalysisResponse)
+async def analyze_audio(file: UploadFile | None = File(None), separateStems: bool = Form(False)):
+    if file is None:
+        raise HTTPException(status_code=400, detail="Missing audio file.")
+    return await analyze_upload(file=file, separate_stems=separateStems)
 
 
 @router.post("/projects", response_model=ProjectSummary, status_code=status.HTTP_201_CREATED)
