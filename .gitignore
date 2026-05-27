@@ -1,0 +1,26 @@
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+
+# Local QA artifacts
+qa/*.png
+
+# Python
+backend/.venv/
+backend/**/__pycache__/
+backend/.pytest_cache/
+*.pyc
+
+# Local runtime data
+data/projects/*
+!data/projects/.gitkeep
+
+# Local env
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
