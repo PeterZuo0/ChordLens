@@ -1,12 +1,14 @@
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse, Response
 
 from app.core.config import ALLOWED_AUDIO_EXTENSIONS
 from app.models.audio import AnalysisSummary, CreateAudioProjectRequest, TransientAudioAnalysisResponse
 from app.models.projects import ProjectSummary
 from app.services.mock_analysis import build_mock_analysis, write_mock_analysis
 from app.services.project_store import create_audio_project, get_project, get_project_dir
+from app.services.stem_sessions import build_stems_zip, clear_session, resolve_stem_path, resolve_zip_path
 from app.services.transient_audio_analysis import analyze_upload
 
 
@@ -18,6 +20,30 @@ async def analyze_audio(file: UploadFile | None = File(None), separateStems: boo
     if file is None:
         raise HTTPException(status_code=400, detail="Missing audio file.")
     return await analyze_upload(file=file, separate_stems=separateStems)
+
+
+@router.get("/stem-sessions/{session_id}/stems/{stem_name}")
+def stream_stem(session_id: str, stem_name: str):
+    stem_path = resolve_stem_path(session_id, stem_name)
+    return FileResponse(stem_path, media_type="audio/wav")
+
+
+@router.get("/stem-sessions/{session_id}/stems/{stem_name}/download")
+def download_stem(session_id: str, stem_name: str):
+    stem_path = resolve_stem_path(session_id, stem_name)
+    return FileResponse(stem_path, media_type="audio/wav", filename=f"{stem_name}.wav")
+
+
+@router.get("/stem-sessions/{session_id}/download")
+def download_stem_zip(session_id: str):
+    archive_path = resolve_zip_path(session_id)
+    return FileResponse(archive_path, media_type="application/zip", filename="stems.zip")
+
+
+@router.delete("/stem-sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_stem_session(session_id: str):
+    clear_session(session_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/projects", response_model=ProjectSummary, status_code=status.HTTP_201_CREATED)

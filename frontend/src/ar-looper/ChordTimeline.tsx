@@ -6,7 +6,7 @@ interface ChordTimelineProps {
 
 export function ChordTimeline({ events }: ChordTimelineProps) {
   return (
-    <section className="tool-panel">
+    <section className="tool-panel loop-timeline">
       <div className="panel-heading">
         <span className="panel-label">Loop timeline</span>
         <strong>{events.length} events</strong>
@@ -16,8 +16,10 @@ export function ChordTimeline({ events }: ChordTimelineProps) {
           {events.map((event, index) => (
             <div className="loop-event" key={event.id}>
               <span>{index + 1}</span>
-              <strong>{event.chord}</strong>
-              <small>{event.beats} beats</small>
+              <strong>
+                {event.chord} x{event.beats}
+              </strong>
+              <small>{new Date(event.createdAt).toLocaleTimeString()}</small>
             </div>
           ))}
         </div>

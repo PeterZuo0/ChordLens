@@ -23,16 +23,13 @@ export function ArControls({
   onClear
 }: ArControlsProps) {
   return (
-    <section className="tool-panel ar-control-panel">
-      <div className="panel-heading">
-        <span className="panel-label">Manual loop input</span>
-        <strong>
-          {selectedChord} x{selectedBeat}
-        </strong>
-      </div>
-      <div className="control-group">
-        <span>Beats</span>
-        <div className="segmented-grid">
+    <section className="ar-controls-layout" aria-label="Manual loop input">
+      <div className="tool-panel beat-rail">
+        <div className="panel-heading">
+          <span className="panel-label">Left hand</span>
+          <strong>Beats</strong>
+        </div>
+        <div className="segmented-grid rail-grid">
           {beats.map((beat) => (
             <button
               aria-pressed={selectedBeat === beat}
@@ -41,14 +38,19 @@ export function ArControls({
               onClick={() => onBeatChange(beat)}
               type="button"
             >
-              {beat}
+              <strong>{beat}</strong>
+              <span>beats</span>
             </button>
           ))}
         </div>
       </div>
-      <div className="control-group">
-        <span>Chord</span>
-        <div className="chord-grid">
+
+      <div className="tool-panel chord-rail">
+        <div className="panel-heading">
+          <span className="panel-label">Right hand</span>
+          <strong>Chord</strong>
+        </div>
+        <div className="chord-grid rail-grid">
           {chords.map((chord) => (
             <button
               aria-pressed={selectedChord === chord}
@@ -61,8 +63,11 @@ export function ArControls({
             </button>
           ))}
         </div>
+        <p className="muted rail-note">Minor and seventh variants are planned after the root-note loop works.</p>
       </div>
-      <div className="button-row">
+
+      <div className="tool-panel transport-actions">
+        <span className="panel-label">Manual commit</span>
         <button className="button primary" onClick={onCommit} type="button">
           Commit chord
         </button>

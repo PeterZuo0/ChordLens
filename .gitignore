@@ -6,6 +6,7 @@ frontend/*.tsbuildinfo
 
 # Local QA artifacts
 qa/*.png
+qa/*.log
 
 # Python
 backend/.venv/
@@ -16,6 +17,8 @@ backend/.pytest_cache/
 # Local runtime data
 data/projects/*
 !data/projects/.gitkeep
+data/stem_sessions/
+output/
 
 # Local env
 .env
@@ -24,3 +27,6 @@ data/projects/*
 
 # IDE
 .idea/
+
+docs/superpowers
+.superpowers

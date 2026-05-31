@@ -32,7 +32,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new Error(message);
   }
+  if (response.status === 204) {
+    return undefined as T;
+  }
   return response.json() as Promise<T>;
+}
+
+export function getApiAssetUrl(path: string) {
+  try {
+    return new URL(path).toString();
+  } catch {
+    return new URL(path, API_BASE_URL).toString();
+  }
 }
 
 export function getHealth() {
@@ -71,5 +82,11 @@ export function analyzeAudioFile(file: File, separateStems: boolean) {
   return request<TransientAudioAnalysisResponse>("/api/audio/analyze", {
     method: "POST",
     body
+  });
+}
+
+export function clearStemSession(sessionId: string) {
+  return request<void>(`/api/audio/stem-sessions/${sessionId}`, {
+    method: "DELETE"
   });
 }

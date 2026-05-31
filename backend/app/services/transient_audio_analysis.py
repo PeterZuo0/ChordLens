@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import importlib.util
 import math
 import shutil
 import subprocess
+import sys
 import wave
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -17,6 +19,11 @@ from app.models.audio import (
     TransientStemAnalysis,
 )
 from app.models.common import AnalysisKind
+from app.services.audio_features import load_audio_for_analysis, summarize_audio_features
+from app.services.instrument_stem_extraction import derive_piano_strings_from_other
+from app.services.instrument_analysis import analyze_instruments_for_scope, summarize_full_mix_instruments
+from app.services.music_analysis import analyze_music_features
+from app.services import stem_sessions
 
 
 PITCH_CLASSES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
@@ -38,17 +45,33 @@ async def analyze_upload(file: UploadFile, separate_stems: bool = False) -> Tran
             raise HTTPException(status_code=400, detail="Uploaded file is empty.")
         temp_path.write_bytes(contents)
 
-        source = inspect_source(temp_path, original_name, len(contents))
-        music = analyze_music(temp_path)
-        stems = separate_audio_stems(temp_path, temp_root) if separate_stems else TransientStemAnalysis()
-
-        return TransientAudioAnalysisResponse(
-            analysisKind=AnalysisKind.BEST_EFFORT,
-            temporary=True,
-            source=source,
-            music=music,
-            stems=stems,
+        return analyze_local_audio_file(
+            path=temp_path,
+            original_name=original_name,
+            size_bytes=len(contents),
+            separate_stems=separate_stems,
         )
+
+
+def analyze_local_audio_file(
+    path: Path,
+    original_name: str | None = None,
+    size_bytes: int | None = None,
+    separate_stems: bool = False,
+) -> TransientAudioAnalysisResponse:
+    display_name = original_name or path.name
+    source = inspect_source(path, display_name, size_bytes if size_bytes is not None else path.stat().st_size)
+    music = analyze_music(path)
+    stems = separate_audio_stems(path, str(path.parent)) if separate_stems else TransientStemAnalysis()
+    attach_stem_analysis(stems)
+
+    return TransientAudioAnalysisResponse(
+        analysisKind=AnalysisKind.BEST_EFFORT,
+        temporary=True,
+        source=source,
+        music=music,
+        stems=stems,
+    )
 
 
 def inspect_source(path: Path, original_name: str, size_bytes: int) -> TransientAudioSource:
@@ -95,17 +118,7 @@ def inspect_source(path: Path, original_name: str, size_bytes: int) -> Transient
 
 def analyze_music(path: Path) -> TransientMusicAnalysis:
     try:
-        import librosa
-    except Exception:
-        if path.suffix.lower() == ".wav" and _can_decode_wav(path):
-            return TransientMusicAnalysis()
-        raise HTTPException(
-            status_code=400,
-            detail="Could not decode audio. Try a valid wav, mp3, or m4a file.",
-        )
-
-    try:
-        samples, sample_rate = librosa.load(path, mono=True, sr=None)
+        audio = load_audio_for_analysis(path)
     except Exception as issue:
         raise HTTPException(
             status_code=400,
@@ -113,19 +126,25 @@ def analyze_music(path: Path) -> TransientMusicAnalysis:
         ) from issue
 
     try:
-        tempo, _ = librosa.beat.beat_track(y=samples, sr=sample_rate)
-        bpm = _positive_int(round(float(tempo)))
+        music = analyze_music_features(audio.samples, audio.sample_rate)
+        music.visualization = summarize_audio_features(audio.samples, audio.sample_rate).visualization
+        music.instrumentSummary = summarize_full_mix_instruments(audio.samples, audio.sample_rate)
+        return music
     except Exception:
-        bpm = None
+        return TransientMusicAnalysis(bpmMessage="Audio decoded, but detailed music analysis failed.")
 
-    try:
-        chroma = librosa.feature.chroma_stft(y=samples, sr=sample_rate)
-        key, confidence = estimate_key(chroma.mean(axis=1))
-    except Exception:
-        key = None
-        confidence = None
 
-    return TransientMusicAnalysis(bpm=bpm, key=key, confidence=confidence)
+def attach_stem_analysis(stems: TransientStemAnalysis) -> None:
+    if stems.status != "complete" or not stems.sessionId:
+        return
+    for item in stems.items:
+        try:
+            stem_path = stem_sessions.resolve_stem_path(stems.sessionId, item.name)
+            audio = load_audio_for_analysis(stem_path)
+            item.analysis = analyze_instruments_for_scope(audio.samples, audio.sample_rate, source=item.name)
+            item.durationSec = item.durationSec if item.durationSec is not None else audio.duration_sec
+        except Exception:
+            item.analysis = None
 
 
 def estimate_key(chroma_vector) -> tuple[str | None, float | None]:
@@ -155,38 +174,69 @@ def estimate_key(chroma_vector) -> tuple[str | None, float | None]:
 
 
 def separate_audio_stems(path: Path, temp_root: str) -> TransientStemAnalysis:
-    demucs_path = shutil.which("demucs")
-    if demucs_path is None:
+    demucs_command = _demucs_command()
+    if demucs_command is None:
         return TransientStemAnalysis(
             requested=True,
             status="unavailable",
+            engine="demucs",
             message="Demucs is not installed. Install Demucs and make sure it is available on PATH.",
         )
 
-    output_dir = Path(temp_root) / "stems"
+    session_id, session_dir = stem_sessions.create_session_dir()
+    output_dir = session_dir / "demucs-output"
     try:
         result = subprocess.run(
-            [demucs_path, "--out", str(output_dir), str(path)],
+            [*demucs_command, "--out", str(output_dir), str(path)],
             capture_output=True,
             check=False,
             text=True,
             timeout=900,
         )
     except subprocess.TimeoutExpired:
+        stem_sessions.clear_session(session_id)
         return TransientStemAnalysis(
             requested=True,
             status="failed",
+            engine="demucs",
             message="Demucs stem separation timed out.",
         )
     if result.returncode != 0:
+        stem_sessions.clear_session(session_id)
         message = _safe_demucs_error(result.stderr or result.stdout)
-        return TransientStemAnalysis(requested=True, status="failed", message=message)
+        return TransientStemAnalysis(requested=True, status="failed", engine="demucs", message=message)
+
+    try:
+        items = stem_sessions.normalize_demucs_output(output_dir, session_dir, session_id)
+        derived_items = derive_piano_strings_from_other(session_dir / "stems", session_id)
+        items.extend(derived_items)
+        stem_sessions.build_stems_zip(session_id)
+    except HTTPException:
+        stem_sessions.clear_session(session_id)
+        return TransientStemAnalysis(
+            requested=True,
+            status="failed",
+            engine="demucs",
+            message="Demucs stem separation finished but did not produce the expected local stems.",
+        )
 
     return TransientStemAnalysis(
         requested=True,
         status="complete",
-        items=["vocals", "drums", "bass", "other"],
+        sessionId=session_id,
+        engine="demucs+local-dsp" if derived_items else "demucs",
+        items=items,
+        zipDownloadUrl=f"/api/audio/stem-sessions/{session_id}/download",
     )
+
+
+def _demucs_command() -> list[str] | None:
+    demucs_path = shutil.which("demucs")
+    if demucs_path is not None:
+        return [demucs_path]
+    if importlib.util.find_spec("demucs") is not None:
+        return [sys.executable, "-m", "demucs"]
+    return None
 
 
 def _inspect_wav(path: Path) -> tuple[float | None, int | None, int | None]:

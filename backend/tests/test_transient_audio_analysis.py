@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.main import app
+from audio_fixtures import build_click_wav
 
 
 def build_test_wav(duration_sec: float = 1.0, sample_rate: int = 22050) -> bytes:
@@ -39,8 +40,36 @@ def test_analyze_wav_returns_transient_best_effort_result():
     assert body["source"]["channels"] == 1
     assert body["music"]["bpm"] is None or body["music"]["bpm"] > 0
     assert body["music"]["key"] is None or isinstance(body["music"]["key"], str)
+    assert "bpmConfidence" in body["music"]
+    assert "bpmCandidates" in body["music"]
+    assert "bpmMessage" in body["music"]
+    assert "keyConfidence" in body["music"]
+    assert "chordHints" in body["music"]
+    assert "structure" in body["music"]
+    assert "instrumentSummary" in body["music"]
+    assert body["music"]["visualization"]["waveform"]
+    assert body["music"]["visualization"]["spectrum"]
     assert body["stems"]["requested"] is False
     assert body["stems"]["status"] == "not_requested"
+    assert body["stems"]["items"] == []
+    assert body["stems"]["sessionId"] is None
+    assert body["stems"]["zipDownloadUrl"] is None
+
+
+def test_transient_audio_response_serializes_extended_analysis_fields():
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/audio/analyze",
+        files={"file": ("click.wav", build_click_wav(bpm=90, duration_sec=4.0), "audio/wav")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body["music"]["bpmCandidates"], list)
+    assert isinstance(body["music"]["structure"], list)
+    assert isinstance(body["music"]["instrumentSummary"], list)
+    assert isinstance(body["music"]["visualization"]["waveform"], list)
 
 
 def test_analyze_rejects_unsupported_extension():
@@ -89,7 +118,9 @@ def test_analyze_without_stems_does_not_invoke_demucs(monkeypatch):
 def test_analyze_reports_demucs_unavailable(monkeypatch):
     import app.services.transient_audio_analysis as service
 
+    real_find_spec = service.importlib.util.find_spec
     monkeypatch.setattr(service.shutil, "which", lambda command: None)
+    monkeypatch.setattr(service.importlib.util, "find_spec", lambda name: None if name == "demucs" else real_find_spec(name))
     client = TestClient(app)
 
     response = client.post(
@@ -102,6 +133,82 @@ def test_analyze_reports_demucs_unavailable(monkeypatch):
     body = response.json()
     assert body["stems"]["requested"] is True
     assert body["stems"]["status"] == "unavailable"
+    assert body["stems"]["engine"] == "demucs"
+    assert body["stems"]["items"] == []
+    assert body["stems"]["zipDownloadUrl"] is None
+
+
+def test_analyze_uses_python_module_demucs_when_command_is_not_on_path(monkeypatch, tmp_path):
+    import app.services.stem_sessions as stem_sessions
+    import app.services.transient_audio_analysis as service
+
+    captured_args: list[str] = []
+    real_find_spec = service.importlib.util.find_spec
+    real_run = service.subprocess.run
+    monkeypatch.setattr(service.shutil, "which", lambda command: None)
+    monkeypatch.setattr(service.importlib.util, "find_spec", lambda name: object() if name == "demucs" else real_find_spec(name))
+    monkeypatch.setattr(stem_sessions, "STEM_SESSIONS_DIR", tmp_path / "stem_sessions")
+
+    def fake_run(args, **kwargs):
+        if not isinstance(args, list) or "--out" not in args:
+            return real_run(args, **kwargs)
+        captured_args.extend(args)
+        output_dir = Path(args[args.index("--out") + 1])
+        for stem_name in stem_sessions.DEMUCS_STEM_NAMES:
+            target = output_dir / "htdemucs" / "sample" / f"{stem_name}.wav"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(build_test_wav(duration_sec=0.1))
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(service.subprocess, "run", fake_run)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/audio/analyze",
+        files={"file": ("sample.wav", build_test_wav(), "audio/wav")},
+        data={"separateStems": "true"},
+    )
+
+    assert response.status_code == 200
+    assert captured_args[:3] == [service.sys.executable, "-m", "demucs"]
+    assert response.json()["stems"]["status"] == "complete"
+
+
+def test_analyze_returns_stem_file_metadata_when_demucs_succeeds(monkeypatch, tmp_path):
+    import app.services.stem_sessions as stem_sessions
+    import app.services.transient_audio_analysis as service
+
+    monkeypatch.setattr(service.shutil, "which", lambda command: "demucs")
+    monkeypatch.setattr(stem_sessions, "STEM_SESSIONS_DIR", tmp_path / "stem_sessions")
+
+    def fake_run(args, **kwargs):
+        output_dir = Path(args[2])
+        for stem_name in stem_sessions.DEMUCS_STEM_NAMES:
+            target = output_dir / "htdemucs" / "sample" / f"{stem_name}.wav"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(build_test_wav(duration_sec=0.1))
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(service.subprocess, "run", fake_run)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/audio/analyze",
+        files={"file": ("sample.wav", build_test_wav(), "audio/wav")},
+        data={"separateStems": "true"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["stems"]["requested"] is True
+    assert body["stems"]["status"] == "complete"
+    assert body["stems"]["engine"] == "demucs+local-dsp"
+    assert body["stems"]["sessionId"]
+    assert body["stems"]["zipDownloadUrl"]
+    assert {item["name"] for item in body["stems"]["items"]} == {"vocals", "drums", "bass", "other", "piano", "strings"}
+    assert all(item["streamUrl"] for item in body["stems"]["items"])
+    assert all(item["downloadUrl"] for item in body["stems"]["items"])
+    assert all(item["fileSizeBytes"] > 0 for item in body["stems"]["items"])
 
 
 def test_analyze_cleans_temporary_directory(monkeypatch, tmp_path):

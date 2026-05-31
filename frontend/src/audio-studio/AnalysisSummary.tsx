@@ -1,4 +1,9 @@
 import type { TransientAudioAnalysisResponse } from "../api/types";
+import { MetricTile } from "../components/MetricTile";
+import { WorkspacePanel } from "../components/WorkspacePanel";
+import { InstrumentEvidenceList } from "./InstrumentEvidenceList";
+import { TempoConfidencePanel } from "./TempoConfidencePanel";
+import { WaveformPreview } from "./WaveformPreview";
 
 interface AnalysisSummaryProps {
   analysis: TransientAudioAnalysisResponse | null;
@@ -8,7 +13,11 @@ function formatDuration(durationSec: number | null) {
   if (durationSec === null) {
     return "Unknown";
   }
-  return `${durationSec.toFixed(1)}s`;
+  const minutes = Math.floor(durationSec / 60);
+  const seconds = Math.round(durationSec % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }
 
 function formatSize(bytes: number) {
@@ -20,46 +29,29 @@ function formatSize(bytes: number) {
 
 export function AnalysisSummary({ analysis }: AnalysisSummaryProps) {
   return (
-    <section className="tool-panel">
-      <div className="panel-heading">
-        <span className="panel-label">Analysis</span>
-        <strong>{analysis?.analysisKind ?? "No result"}</strong>
-      </div>
+    <WorkspacePanel className="analysis-panel" label="Analysis" title={analysis?.analysisKind ?? "No result"}>
       {analysis ? (
         <>
           <div className="summary-grid">
-            <div>
-              <span>Source</span>
-              <strong>{analysis.source.fileName}</strong>
-            </div>
-            <div>
-              <span>Format</span>
-              <strong>{analysis.source.format}</strong>
-            </div>
-            <div>
-              <span>Size</span>
-              <strong>{formatSize(analysis.source.fileSizeBytes)}</strong>
-            </div>
-            <div>
-              <span>Duration</span>
-              <strong>{formatDuration(analysis.source.durationSec)}</strong>
-            </div>
-            <div>
-              <span>Sample rate</span>
-              <strong>{analysis.source.sampleRate ? `${analysis.source.sampleRate} Hz` : "Unknown"}</strong>
-            </div>
-            <div>
-              <span>Channels</span>
-              <strong>{analysis.source.channels ?? "Unknown"}</strong>
-            </div>
-            <div>
-              <span>BPM</span>
-              <strong>{analysis.music.bpm ?? "Unknown"}</strong>
-            </div>
-            <div>
-              <span>Key</span>
-              <strong>{analysis.music.key ?? "Unknown"}</strong>
-            </div>
+            <MetricTile detail={analysis.source.fileName} label="Source" tone="cool" value="Loaded" />
+            <MetricTile label="Format" value={analysis.source.format} />
+            <MetricTile label="Size" value={formatSize(analysis.source.fileSizeBytes)} />
+            <MetricTile label="Duration" value={formatDuration(analysis.source.durationSec)} />
+            <MetricTile
+              label="Sample rate"
+              value={analysis.source.sampleRate ? `${analysis.source.sampleRate} Hz` : "Unknown"}
+            />
+            <MetricTile label="Channels" value={analysis.source.channels ? `${analysis.source.channels} CH` : "Unknown"} />
+          </div>
+          <TempoConfidencePanel music={analysis.music} />
+          <WaveformPreview
+            label="Source waveform"
+            spectrum={analysis.music.visualization.spectrum}
+            waveform={analysis.music.visualization.waveform}
+          />
+          <div className="analysis-instrument-summary">
+            <span className="panel-label">Full-mix instruments</span>
+            <InstrumentEvidenceList hints={analysis.music.instrumentSummary} />
           </div>
           <p className="status-note">
             This result is best-effort and temporary. Refreshing the page clears it.
@@ -68,6 +60,6 @@ export function AnalysisSummary({ analysis }: AnalysisSummaryProps) {
       ) : (
         <p className="muted">Upload a local audio file to run one-time analysis.</p>
       )}
-    </section>
+    </WorkspacePanel>
   );
 }
